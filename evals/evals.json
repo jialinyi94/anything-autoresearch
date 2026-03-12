@@ -1,0 +1,54 @@
+{
+  "skill_name": "anything-autoresearch",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我想用 autoresearch 来优化一个小型语言模型的训练，我有一块 RTX 4090，数据集用 TinyStories。帮我搭建整个框架",
+      "expected_output": "应当：1) 询问澄清问题(度量、时间预算等) 2) 讨论 train/val/test split 3) 设计项目结构 4) 生成实际可运行的 prepare.py, train.py, program.md, evaluate_test.py 5) test set 必须对 agent 不可见",
+      "files": [],
+      "assertions": [
+        {"id": "C1", "text": "Has a single mutable file (train.py or equivalent) clearly designated for agent modification", "type": "boolean"},
+        {"id": "C2", "text": "Has fixed infrastructure file (prepare.py or equivalent) with evaluation harness", "type": "boolean"},
+        {"id": "C3", "text": "Has program.md with autonomous experiment loop instructions", "type": "boolean"},
+        {"id": "C4", "text": "Has evaluate_test.py for human-only test set evaluation", "type": "boolean"},
+        {"id": "C5", "text": "Test set isolation: evaluate function contains AUTORESEARCH_TEST_KEY env-var gate", "type": "boolean"},
+        {"id": "C6", "text": "Output format includes both train and validation metrics plus train_val_gap", "type": "boolean"},
+        {"id": "C7", "text": "program.md contains train-val gap threshold discard rule", "type": "boolean"},
+        {"id": "C8", "text": "evaluate_test.py properly loads trained model checkpoints (not fresh random model)", "type": "boolean"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "我想搭建一个 autoresearch 框架来自动优化我的 RAG 系统的 prompt。我用 OpenAI API 做 embedding 和 generation，有一个带标注的 QA 数据集(500条)，度量标准是 answer relevance score (0-1)。帮我搞起来",
+      "expected_output": "应当：1) 讨论 prompt 作为 mutable file 的设计 2) 讨论 500条数据的 train/val/test 分割方案 3) 讨论 API 调用的时间/成本约束 4) 生成 harness.py(评估+数据加载), prompt.py(可变), program.md, evaluate_test.py 5) test set QA pairs 必须不在 agent 可见范围内",
+      "files": [],
+      "assertions": [
+        {"id": "C1", "text": "Has a single mutable file (prompt.py or equivalent) clearly designated for agent modification", "type": "boolean"},
+        {"id": "C2", "text": "Has fixed infrastructure file (harness.py or equivalent) with evaluation harness", "type": "boolean"},
+        {"id": "C3", "text": "Has program.md with autonomous experiment loop instructions", "type": "boolean"},
+        {"id": "C4", "text": "Has evaluate_test.py for human-only test set evaluation", "type": "boolean"},
+        {"id": "C5", "text": "Test set isolation: evaluate function contains AUTORESEARCH_TEST_KEY env-var gate", "type": "boolean"},
+        {"id": "C6", "text": "Output format includes both train and validation metrics plus train_val_gap", "type": "boolean"},
+        {"id": "C7", "text": "program.md contains train-val gap threshold discard rule", "type": "boolean"},
+        {"id": "C8", "text": "Prompt template is the mutable artifact (not model code or config)", "type": "boolean"}
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "帮我用 autoresearch 的思路搭建一个自主优化均值回归策略参数的框架。我用 Python + pandas，有 5 年的美股日频数据(S&P 500成分股)，用 Sharpe ratio 作为指标。想让 agent 自动尝试不同的 entry/exit threshold、lookback window、position sizing",
+      "expected_output": "应当：1) 讨论 Sharpe ratio 作为度量的注意事项(样本内过拟合) 2) 讨论数据的时间序列 train/val/test split(不能随机split，要按时间) 3) 讨论回测时间预算 4) 生成 backtest.py(固定), strategy.py(可变), program.md, evaluate_test.py 5) test period 数据必须不在 agent 回测范围内",
+      "files": [],
+      "assertions": [
+        {"id": "C1", "text": "Has a single mutable file (strategy.py or equivalent) clearly designated for agent modification", "type": "boolean"},
+        {"id": "C2", "text": "Has fixed infrastructure file (backtest.py or equivalent) with evaluation harness", "type": "boolean"},
+        {"id": "C3", "text": "Has program.md with autonomous experiment loop instructions", "type": "boolean"},
+        {"id": "C4", "text": "Has evaluate_test.py for human-only test set evaluation", "type": "boolean"},
+        {"id": "C5", "text": "Test set isolation: evaluate function contains AUTORESEARCH_TEST_KEY env-var gate", "type": "boolean"},
+        {"id": "C6", "text": "Output format includes both train and validation metrics plus train_val_gap", "type": "boolean"},
+        {"id": "C7", "text": "program.md contains train-val gap threshold discard rule", "type": "boolean"},
+        {"id": "S1", "text": "Data split is chronological (time-ordered), not random", "type": "boolean"},
+        {"id": "S2", "text": "Gap/purge period between train/val/test splits to prevent temporal leakage", "type": "boolean"}
+      ]
+    }
+  ]
+}
