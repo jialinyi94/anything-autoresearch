@@ -2,6 +2,11 @@
 
 Read this file when you reach Phase 3 (Code Generation). It contains the templates and requirements for each generated file.
 
+> **Note**: The templates below are for **standard mode** (convention-based isolation with
+> `AUTORESEARCH_TEST_KEY`). If the user chose **hardened mode** (100% isolation), read
+> `references/hardened-isolation.md` instead — the architecture is fundamentally different
+> (two-directory split, no test code in agent's workspace at all).
+
 ## 3a. The Fixed Infrastructure (`prepare.py` equivalent)
 
 This file contains:

@@ -79,13 +79,23 @@ Interview the user to nail down these seven elements. Don't proceed until all ar
   | Validation set | Public LB (~30%) | Agent (sees metric) |
   | Test set | Private LB (~70%) | Human only |
 
-  **Three layers of isolation** (defense in depth):
+  **Two isolation modes** — ask the user which one they want:
 
-  **Layer 1: Physical** — test data outside agent's working tree; `evaluate_test.py` in `.gitignore`
+  **Standard mode** (default) — two-directory split, agent workspace has zero test data:
+  - Agent's `prepare.py` only has train/val — no test code, keys, or date ranges
+  - `evaluate()` only accepts "train" / "validation" — no "test" branch at all
+  - `human-eval/` directory lives outside agent's workspace with test data and `evaluate_test.py`
+  - Train-val gap monitoring with hard discard threshold
 
-  **Layer 2: Programmatic** — `evaluate(split="test")` requires `AUTORESEARCH_TEST_KEY` env var, else raises `PermissionError`. Even if the agent tries, it fails.
+  **Hardened mode** — for high-stakes domains (finance, competition, real money):
+  - Everything in standard mode, PLUS:
+  - Test data encrypted and stored in GitHub Secrets / CI environment
+  - Test evaluation runs in GitHub Actions (disposable CI runner), not on agent's machine
+  - Environment protection rules require human approval before secrets are accessible
+  - Agent's `gh` CLI access restricted to prevent workflow injection attacks
+  - **Read `references/hardened-isolation.md`** for the full architecture
 
-  **Layer 3: Train-val gap monitoring** — report both train and val metrics; discard if gap exceeds threshold even when val improves. Analogous to Kaggle's submission rate limiting.
+  Recommend hardened mode for trading strategies, real-money decisions, and competitions.
 
   **Time-series specific**: NEVER randomly split — always chronological. Add gap/purge period between splits. Validation set must be fixed across all experiments.
 
@@ -97,18 +107,37 @@ Ask follow-up questions: crash handling, non-determinism, metric comparability, 
 
 ### Phase 2: Architecture Design
 
-Present the project structure for confirmation:
+Present the project structure for confirmation.
 
+**Standard mode** (two-directory split):
 ```
 <project>/
-├── prepare.py        # Fixed infrastructure: data, evaluation, constants
-├── run.py            # The mutable file (name varies by domain)
-├── program.md        # Agent instructions for the experiment loop
-├── evaluate_test.py  # Test-set evaluation (human-only, in .gitignore)
-├── results.tsv       # Experiment log (untracked)
-├── pyproject.toml    # Dependencies
-└── .gitignore
+├── agent-workspace/          ← Agent's working directory (git repo)
+│   ├── prepare.py            ← ONLY train+val data, NO test anything
+│   ├── run.py                ← Mutable file
+│   ├── program.md            ← No mention of test set
+│   ├── results.tsv
+│   ├── pyproject.toml
+│   └── .gitignore
+│
+└── human-eval/               ← Outside agent's reach
+    ├── evaluate_test.py      ← Imports from agent-workspace, evaluates on test data
+    ├── test_data/
+    └── README.md
 ```
+
+**Hardened mode** (standard + GitHub Secrets/CI):
+```
+<project>/
+├── agent-workspace/          ← Same as standard mode
+│   └── ...
+├── human-eval/               ← evaluate_test.py (also in CI workflow)
+│   └── ...
+└── .github/workflows/
+    └── test-eval.yml         ← workflow_dispatch, environment protection
+```
+Test data stored as encrypted GitHub Secrets or downloaded from protected storage during CI.
+Human clicks "Run workflow" in GitHub UI → CI runner evaluates → results in workflow logs.
 
 Domain naming conventions:
 - ML: `prepare.py` + `train.py`
@@ -121,7 +150,9 @@ Domain naming conventions:
 
 Generate all files. The code must actually work — no pseudocode.
 
-**Read `references/code-templates.md` for detailed templates and requirements** for each file: the fixed infrastructure (with `AUTORESEARCH_TEST_KEY` gate), the mutable file, `program.md` (with experiment loop, keep/discard logic, train-val gap threshold), `evaluate_test.py`, and supporting files.
+**Read `references/code-templates.md` for detailed templates and requirements** for each file: the fixed infrastructure, the mutable file, `program.md` (with experiment loop, keep/discard logic, train-val gap threshold), `evaluate_test.py`, and supporting files.
+
+If using **hardened mode**, also **read `references/hardened-isolation.md`** for the two-directory architecture where the agent's workspace contains zero test-related code or data.
 
 ### Phase 3e: Multi-Agent Support (optional)
 
@@ -147,6 +178,6 @@ After generating all code:
 - **Git discipline matters.** Each experiment = one commit. Revert = `git reset --hard HEAD~1`.
 - **Mutable file should be self-contained.** No deep import chains.
 - **Seed everything reproducible.** Fixed random seeds where possible.
-- **Test set isolation is non-negotiable.** Defense in depth: physical + programmatic (`AUTORESEARCH_TEST_KEY`) + `.gitignore`. Think Kaggle private leaderboard.
+- **Test set isolation is non-negotiable.** Standard mode: two-directory split, agent workspace has zero test data. Hardened mode: adds GitHub Secrets + CI for air-gapped evaluation. Think Kaggle private leaderboard.
 - **Monitor the train-val gap.** Growing gap = overfitting. Hard threshold in program.md for high-risk domains (finance, small datasets).
 - **Time-series = chronological splits.** Never shuffle. Gap/purge between splits.
