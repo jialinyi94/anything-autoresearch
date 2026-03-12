@@ -199,6 +199,7 @@ You launch it simply as: `<run_command>`.
 - Modify `<fixed_file>`. It is read-only.
 - Install new packages or add dependencies.
 - Modify the evaluation harness.
+- Access files outside this directory.
 
 **The goal is simple: get the <best> validation <metric_name>.**
 
@@ -276,5 +277,66 @@ The loop runs until the human interrupts you, period.
 
 - **pyproject.toml** (or equivalent) — pin dependencies
 - **.gitignore** — ignore `run.log`, `results.tsv`, `__pycache__/`, any caches
-- **README.md** — brief explanation of the project
+- **README.md** — project overview + deployment guide (see template below)
 - **human-eval/README.md** — instructions for the human on how to run test evaluation
+
+### README.md Template
+
+Generate a README.md at the project root that includes:
+
+```markdown
+# <Project Name> — Autoresearch Framework
+
+<Brief description of what this framework optimizes>
+
+## Directory Structure
+
+This framework uses a **two-directory architecture** to isolate the agent from test data:
+
+```
+<project>/
+├── agent-workspace/    # Everything the AI agent can see and use
+│   ├── program.md      # Agent's autonomous experiment loop instructions
+│   ├── <fixed_file>    # Evaluation harness (read-only for agent)
+│   ├── <mutable_file>  # The file the agent modifies each experiment
+│   └── ...
+└── human-eval/         # Test evaluation — agent has NO access
+    ├── evaluate_test.py
+    └── ...
+```
+
+## Deployment: Separating the Two Directories
+
+For the isolation to be effective, the agent must not be able to access
+`human-eval/`. How strictly you enforce this depends on your threat model:
+
+### Option A: Same repo, different directories (convenient, basic isolation)
+
+Keep both directories in the same repo. The agent is instructed to only work
+within `agent-workspace/` and has no knowledge of `human-eval/`. This is
+sufficient for most research use cases, but a determined agent could
+traverse the filesystem to find `../human-eval/`.
+
+### Option B: Separate repositories (recommended for important results)
+
+Put `agent-workspace/` and `human-eval/` in **separate Git repos**.
+The agent only has access to the agent-workspace repo. This prevents
+filesystem traversal attacks entirely.
+
+### Option C: Hardened mode with CI (recommended for high-stakes domains)
+
+Store test data in **GitHub Secrets** and run test evaluation in
+**GitHub Actions** on a disposable CI runner. The agent never has access
+to test data, even indirectly. See `human-eval/README.md` for setup.
+
+## Quick Start
+
+1. Set up the agent workspace (give the agent access to `agent-workspace/` only)
+2. Point the agent at `agent-workspace/program.md`
+3. Let it run autonomously
+4. When done, evaluate the best model using `human-eval/evaluate_test.py`
+```
+
+Adapt this template to the specific project. The key point: always include the
+deployment options section so the human user understands how to physically
+separate the directories for their threat model.
