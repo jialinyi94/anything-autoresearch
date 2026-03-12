@@ -49,6 +49,25 @@
         {"id": "S1", "text": "Data split is chronological (time-ordered), not random", "type": "boolean"},
         {"id": "S2", "text": "Gap/purge period between train/val/test splits to prevent temporal leakage", "type": "boolean"}
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "帮我用 autoresearch 的思路搭建一个自主优化均值回归策略参数的框架。我用 Python + pandas，有 5 年的美股日频数据(S&P 500成分股)，用 Sharpe ratio 作为指标。想让 agent 自动尝试不同的 entry/exit threshold、lookback window、position sizing",
+      "expected_output": "生成的代码必须通过端到端隔离测试：1) evaluate(split='test') 无 key 时抛 PermissionError 2) 错误 key 也抛 PermissionError 3) train/val 无 key 正常工作 4) 正确 key 时 test 正常工作 5) evaluate_test.py 在 .gitignore 中 6) _load_test_data 是私有函数 7) program.md 含 gap 阈值 discard 规则 8) chronological split 且 splits 间有 gap",
+      "files": [],
+      "assertions": [
+        {"id": "ISO-1", "text": "evaluate_test.py listed in .gitignore", "type": "executable"},
+        {"id": "ISO-2", "text": "_load_test_data is private (underscore prefix), no public load_test_data exists", "type": "executable"},
+        {"id": "ISO-3", "text": "evaluate(split='test') raises PermissionError when AUTORESEARCH_TEST_KEY is not set", "type": "executable"},
+        {"id": "ISO-4", "text": "evaluate(split='test') raises PermissionError when AUTORESEARCH_TEST_KEY is wrong", "type": "executable"},
+        {"id": "ISO-5", "text": "evaluate(split='validation') works without any key set", "type": "executable"},
+        {"id": "ISO-6", "text": "evaluate(split='train') works without any key set", "type": "executable"},
+        {"id": "ISO-7", "text": "evaluate(split='test') succeeds with correct AUTORESEARCH_TEST_KEY", "type": "executable"},
+        {"id": "ISO-8", "text": "program.md contains train_val_gap discard rule with numeric threshold", "type": "executable"},
+        {"id": "ISO-9", "text": "Data splits are chronological with >7 day gap between train/val and val/test", "type": "executable"}
+      ],
+      "test_script": "iteration-2/test_isolation.py",
+      "notes": "This eval runs actual generated code to verify isolation works at runtime, not just that keywords appear in files. Reuses eval 3 prompt but grades by executing the code."
     }
   ]
 }
