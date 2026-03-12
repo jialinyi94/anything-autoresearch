@@ -1,18 +1,19 @@
 # Code Templates
 
-Read this file when you reach Phase 3 (Code Generation). It contains the templates and requirements for each generated file.
+Read this file when you reach Phase 3 (Code Generation). It contains the templates
+and requirements for each generated file.
 
-> **Note**: The templates below are for **standard mode** (convention-based isolation with
-> `AUTORESEARCH_TEST_KEY`). If the user chose **hardened mode** (100% isolation), read
-> `references/hardened-isolation.md` instead — the architecture is fundamentally different
-> (two-directory split, no test code in agent's workspace at all).
+For isolation architecture details (two-directory split, GitHub Secrets/CI),
+read `references/hardened-isolation.md`.
 
 ## 3a. The Fixed Infrastructure (`prepare.py` equivalent)
 
-This file contains:
+This file lives in `agent-workspace/` and contains ONLY train and validation logic.
+No test-related code, keys, or date ranges.
 
 ```python
 import os
+import time
 
 # --- Constants (DO NOT MODIFY) ---
 TIME_BUDGET = ...       # seconds per experiment
@@ -22,34 +23,38 @@ METRIC_DIRECTION = ...  # "minimize" or "maximize"
 # --- Data Splits ---
 # Train: used during experiment runs
 # Validation: used to compute the metric the agent optimizes (agent sees this number)
-# Test: HELD OUT — agent never sees this. Human evaluates after all experiments.
-#
-# The test set is NOT loaded or accessible from this file.
-# Use evaluate_test.py (separate script, run manually) for final evaluation.
+# These are the ONLY splits in this file.
 
-_EXPECTED_KEY = "..."   # hash or passphrase for test set access
+TRAIN_START = "..."
+TRAIN_END = "..."
+VAL_START = "..."
+VAL_END = "..."
 
 # --- Data / Input Preparation ---
-# Download, preprocess, cache train + validation data
-# Do NOT download or prepare test data here
+# Download, preprocess, cache train + validation data ONLY
 # Provide loader functions the mutable file can import
 
+def _load_data():
+    """Load or generate the full dataset (train + validation ONLY)."""
+    ...
+
+def _load_train_data():
+    data = _load_data()
+    return data[TRAIN_START:TRAIN_END]  # adapt to your data structure
+
+def _load_val_data():
+    data = _load_data()
+    return data[VAL_START:VAL_END]
+
 # --- Evaluation Harness (DO NOT MODIFY) ---
-def evaluate(model_or_fn, split="validation") -> float:
-    """Evaluate on train or validation split.
-    Test split requires AUTORESEARCH_TEST_KEY env var (human-only)."""
-    if split == "test":
-        key = os.environ.get("AUTORESEARCH_TEST_KEY")
-        if not key or key != _EXPECTED_KEY:
-            raise PermissionError(
-                "Test evaluation requires AUTORESEARCH_TEST_KEY. "
-                "This is for human-only post-experiment evaluation."
-            )
-        data = _load_test_data()
-    elif split in ("train", "validation"):
-        data = _load_train_data() if split == "train" else _load_val_data()
+def evaluate(model_or_fn, split="validation"):
+    """Evaluate on train or validation split."""
+    if split == "train":
+        data = _load_train_data()
+    elif split == "validation":
+        data = _load_val_data()
     else:
-        raise ValueError(f"Unknown split: {split}")
+        raise ValueError(f"Unknown split: {split}. Only 'train' and 'validation' are available.")
     return _compute_metric(model_or_fn, data)
 ```
 
@@ -57,9 +62,9 @@ Requirements:
 - All constants at the top, clearly labeled
 - Data prep is idempotent (safe to run multiple times)
 - Evaluation function is self-contained and deterministic
-- **Programmatic access control**: `evaluate(split="test")` raises PermissionError
-  unless `AUTORESEARCH_TEST_KEY` env var is set — even if the agent tries, it fails
-- **Only train and validation data are freely accessible** — test data requires auth
+- `evaluate()` only accepts `"train"` or `"validation"` — NO `"test"` branch,
+  no `_EXPECTED_KEY`, no key checking logic, no `_load_test_data()` function
+- Data generation/loading covers ONLY the train+val period
 - The mutable file should call `evaluate()` on BOTH train and validation, printing both
   metrics so the agent and human can monitor the train-val gap
 - Prints the metric in a parseable format at the end (same as autoresearch):
@@ -75,15 +80,72 @@ wall_seconds:         <value>
 
 ## 3b. The evaluate_test.py (human-only)
 
+This file lives in `human-eval/` (outside the agent's workspace). It is a standalone
+script with its own test data loading — it does NOT call `evaluate(split="test")`.
+
 Generate a **separate `evaluate_test.py`** that:
-- Sets `AUTORESEARCH_TEST_KEY` programmatically or reads it from a dotenv
-- Loads the held-out test set from its separate location
-- Reuses the same metric computation logic (`evaluate(split="test")`)
+- Lives in `human-eval/`, NOT in agent-workspace
+- Imports the agent's model/strategy from agent-workspace via `sys.path`
+- Has its own `load_test_data()` function that loads test data from `human-eval/test_data/`
+  (standard mode) or from files decoded from GitHub Secrets (hardened mode)
+- Has its own `compute_metric()` function — same metric logic as prepare.py, kept in sync
 - Prints a clear comparison: train metric vs validation metric vs test metric
 - Includes an overfitting diagnostic: if val significantly beats test, warn the human
 - Is meant to be run manually by the human, NEVER by the agent
 - Must load model checkpoints / artifacts properly (not just a fresh random model)
-- Add this file to `.gitignore` or keep it outside the agent's working directory
+
+Template:
+```python
+#!/usr/bin/env python3
+"""Test set evaluation — run manually by the human ONLY.
+
+This file lives OUTSIDE the agent's workspace.
+Standard mode: run locally from human-eval/ directory.
+Hardened mode: runs in GitHub Actions CI.
+"""
+import sys
+import os
+
+# --- Import the agent's strategy/model ---
+AGENT_WORKSPACE = os.path.join(os.path.dirname(__file__), "..", "agent-workspace")
+sys.path.insert(0, AGENT_WORKSPACE)
+
+from run import model_or_fn  # adapt to your domain
+import prepare
+
+# --- Test data (agent has NO access to this) ---
+TEST_START = "..."
+TEST_END = "..."
+
+def load_test_data():
+    """Load test data from human-eval/test_data/.
+    This function is self-contained — it does NOT call prepare.evaluate()."""
+    test_data_path = os.path.join(os.path.dirname(__file__), "test_data")
+    ...
+
+def compute_metric(model_or_fn, data):
+    """Same metric logic as prepare._compute_metric() — keep in sync!"""
+    ...
+
+if __name__ == "__main__":
+    # Get train/val metrics via prepare.evaluate()
+    train_metric = prepare.evaluate(model_or_fn, split="train")
+    val_metric = prepare.evaluate(model_or_fn, split="validation")
+
+    # Get test metric via our own function (NOT prepare.evaluate)
+    test_data = load_test_data()
+    test_metric = compute_metric(model_or_fn, test_data)
+
+    print("=" * 60)
+    print(f"Train {prepare.METRIC_NAME}:      {train_metric}")
+    print(f"Validation {prepare.METRIC_NAME}: {val_metric}")
+    print(f"Test {prepare.METRIC_NAME}:       {test_metric}")
+    print(f"Val-Test gap:          {abs(val_metric - test_metric):.4f}")
+    print("=" * 60)
+
+    if abs(val_metric - test_metric) > 0.1 * abs(val_metric):
+        print("WARNING: Large val-test gap — possible overfitting to validation set")
+```
 
 ## 3c. The Mutable File (`train.py` equivalent)
 
@@ -97,7 +159,11 @@ This is the file the agent will modify. It should:
 
 ## 3d. The Agent Instructions (`program.md`)
 
-This is the most critical file — it's the "brain" that drives autonomous research. Generate it following this template, adapted to the user's specific problem:
+This is the most critical file — it's the "brain" that drives autonomous research.
+Generate it following this template, adapted to the user's specific problem.
+
+Note: program.md should NOT mention the test set at all. The agent only knows about
+train and validation splits.
 
 ```markdown
 # <Project Name> — Autonomous Research
@@ -133,8 +199,6 @@ You launch it simply as: `<run_command>`.
 - Modify `<fixed_file>`. It is read-only.
 - Install new packages or add dependencies.
 - Modify the evaluation harness.
-- Access, read, or evaluate against the test set. You only see the validation metric.
-  The test set exists for the human to verify generalization after experiments are done.
 
 **The goal is simple: get the <best> validation <metric_name>.**
 
@@ -213,3 +277,4 @@ The loop runs until the human interrupts you, period.
 - **pyproject.toml** (or equivalent) — pin dependencies
 - **.gitignore** — ignore `run.log`, `results.tsv`, `__pycache__/`, any caches
 - **README.md** — brief explanation of the project
+- **human-eval/README.md** — instructions for the human on how to run test evaluation
