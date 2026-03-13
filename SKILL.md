@@ -1,20 +1,6 @@
 ---
 name: anything-autoresearch
-description: >
-  Build autonomous research frameworks where an AI agent runs experiments in a loop
-  without human intervention, inspired by Karpathy's autoresearch pattern. Use this
-  skill whenever the user mentions "autoresearch", wants to set up an autonomous
-  experiment loop, asks for an AI agent to iterate/optimize overnight or for hours
-  unattended, or describes a setup where a single metric is optimized by repeatedly
-  modifying code and measuring results. Key signals: "autoresearch", "自主实验",
-  "agent 自主优化", "let the agent run overnight", "autonomous experimentation",
-  "experiment loop", "自动迭代", "跑一晚上", "连续跑N小时". Applies to ANY domain
-  with a clear metric — ML training, prompt engineering, algorithm tuning, compiler
-  optimization, simulation calibration, trading strategy backtesting, reward shaping,
-  or any iterative optimization problem. Do NOT trigger for simple one-shot tasks like
-  writing a training script, setting up Optuna/grid search, building a backtesting
-  framework, or MLflow experiment tracking — those are standard tools, not autonomous
-  agent loops.
+description: Build Karpathy-style autoresearch: AI agent autonomously runs experiment loops to optimize a metric. Trigger on "autoresearch", "自主实验", autonomous overnight optimization.
 ---
 
 # Anything-AutoResearch
