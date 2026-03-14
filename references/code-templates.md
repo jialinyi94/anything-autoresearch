@@ -273,6 +273,109 @@ The loop runs until the human interrupts you, period.
 <domain-specific suggestions for what to try, ordered by promise>
 ```
 
+## 3f. Claude Code Hooks (Standard + Hardened modes)
+
+Generate these files to enforce test set isolation at the tool level. The hooks prevent
+the autoresearch agent from accessing `human-eval/` via filesystem traversal — the main
+residual attack surface in standard mode.
+
+**Prerequisites**: `jq` must be installed on the agent's machine.
+
+### `enforce-branch.sh`
+
+Blocks ALL tool calls if the agent is not on an `autoresearch/*` branch. This ensures
+the agent always operates within the expected namespace and that `protect-human-eval.sh`
+can assume the branch is correct.
+
+```bash
+#!/bin/bash
+# Blocks all tool calls if not on an autoresearch/* branch.
+# This is a safety net — autoresearch agents must always work on named branches.
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# On an autoresearch branch → allow
+[[ "$BRANCH" == autoresearch/* ]] && exit 0
+
+# Not on autoresearch branch → deny
+jq -n --arg branch "$BRANCH" '{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": ("Must be on an autoresearch/* branch. Current: " + $branch)
+  }
+}'
+```
+
+### `protect-human-eval.sh`
+
+Blocks any tool call that references `human-eval/` in its parameters. Inspects all
+path-like fields from the tool input JSON.
+
+```bash
+#!/bin/bash
+# Blocks access to human-eval/ directory during autoresearch experiments.
+# enforce-branch.sh guarantees we're on an autoresearch/* branch.
+
+INPUT=$(cat)
+
+# Extract all fields that might contain paths or commands
+TEXT=$(echo "$INPUT" | jq -r '[
+  .tool_input.file_path,
+  .tool_input.command,
+  .tool_input.pattern,
+  .tool_input.path,
+  .tool_input.prompt
+] | map(select(. != null)) | join(" ")')
+
+# No reference to human-eval/ → allow (trailing slash avoids matching script's own path)
+[[ "$TEXT" != *"human-eval/"* ]] && exit 0
+
+# Block access
+jq -n '{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "human-eval/ is protected — contains test set evaluation code"
+  }
+}'
+```
+
+### `.claude/settings.json`
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write|Bash|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/enforce-branch.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/protect-human-eval.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Setup instructions
+
+Add to Phase 4 (Verification) or the project README:
+
+```bash
+chmod +x .claude/hooks/enforce-branch.sh .claude/hooks/protect-human-eval.sh
+```
+
+The hooks are committed to the repo and activate automatically when the agent opens
+the project in Claude Code. No manual configuration needed beyond `chmod +x`.
+
 ## 3e. Supporting Files
 
 - **pyproject.toml** (or equivalent) — pin dependencies

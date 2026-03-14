@@ -67,11 +67,14 @@ Interview the user to nail down these seven elements. Don't proceed until all ar
 
   **Two isolation modes** — ask the user which one they want:
 
-  **Standard mode** (default) — two-directory split, agent workspace has zero test data:
+  **Standard mode** (default) — two-directory split + Claude Code hooks enforcement:
   - Agent's `prepare.py` only has train/val — no test code, keys, or date ranges
   - `evaluate()` only accepts "train" / "validation" — no "test" branch at all
   - `human-eval/` directory lives outside agent's workspace with test data and `evaluate_test.py`
   - Train-val gap monitoring with hard discard threshold
+  - **Claude Code hooks** block filesystem traversal to `human-eval/`:
+    - `enforce-branch.sh`: blocks all tool calls if agent is not on an `autoresearch/*` branch
+    - `protect-human-eval.sh`: blocks any tool call referencing `human-eval/`
 
   **Hardened mode** — for high-stakes domains (finance, competition, real money):
   - Everything in standard mode, PLUS:
@@ -95,10 +98,15 @@ Ask follow-up questions: crash handling, non-determinism, metric comparability, 
 
 Present the project structure for confirmation.
 
-**Standard mode** (two-directory split):
+**Standard mode** (two-directory split + hooks):
 ```
 <project>/
 ├── agent-workspace/          ← Agent's working directory (git repo)
+│   ├── .claude/
+│   │   ├── settings.json     ← Hooks configuration
+│   │   └── hooks/
+│   │       ├── enforce-branch.sh      ← Blocks tools if not on autoresearch/* branch
+│   │       └── protect-human-eval.sh  ← Blocks access to human-eval/
 │   ├── prepare.py            ← ONLY train+val data, NO test anything
 │   ├── run.py                ← Mutable file
 │   ├── program.md            ← No mention of test set
@@ -106,7 +114,7 @@ Present the project structure for confirmation.
 │   ├── pyproject.toml
 │   └── .gitignore
 │
-└── human-eval/               ← Outside agent's reach
+└── human-eval/               ← Outside agent's reach (hooks-enforced)
     ├── evaluate_test.py      ← Imports from agent-workspace, evaluates on test data
     ├── test_data/
     └── README.md
@@ -136,7 +144,7 @@ Domain naming conventions:
 
 Generate all files. The code must actually work — no pseudocode.
 
-**Read `references/code-templates.md` for detailed templates and requirements** for each file: the fixed infrastructure, the mutable file, `program.md` (with experiment loop, keep/discard logic, train-val gap threshold), `evaluate_test.py`, and supporting files.
+**Read `references/code-templates.md` for detailed templates and requirements** for each file: the fixed infrastructure, the mutable file, `program.md` (with experiment loop, keep/discard logic, train-val gap threshold), `evaluate_test.py`, Claude Code hooks, and supporting files.
 
 If using **hardened mode**, also **read `references/hardened-isolation.md`** for the two-directory architecture where the agent's workspace contains zero test-related code or data.
 
@@ -158,6 +166,7 @@ After generating all code:
 
 ## Important Principles
 
+- **All autoresearch branches must use the `autoresearch/` prefix.** E.g. `autoresearch/mar12`, `autoresearch/mar12-agent0`. Claude Code hooks depend on this prefix to activate test set protection. Without it, hooks won't fire and isolation is bypassed.
 - **Generate working code, not pseudocode.** Every file should be runnable.
 - **The evaluation harness is sacred.** Wrong metric computation = all experiments meaningless.
 - **Parseable output is critical.** Agent reads metrics from stdout via grep.

@@ -58,13 +58,17 @@ project/
 
 ### Remaining attack surface (standard mode)
 
-- **Agent escapes workspace**: if the agent has unrestricted filesystem access
-  (e.g., Claude Code with full permissions), it could `ls ../human-eval/`
 - **Agent modifies prepare.py**: program.md forbids it, git hooks can enforce it
+- **Agent modifies/disables `.claude/hooks/`**: program.md forbids it; treat as same threat model as modifying prepare.py
 - **Side-channel via timing**: theoretical concern in all ML evaluation
 
-Standard mode blocks all 13 red-team attack vectors within the workspace, but does
-not prevent filesystem traversal attacks. For that, use hardened mode.
+Standard mode blocks all 13 red-team attack vectors within the workspace AND
+filesystem traversal via Claude Code hooks (attack #14). The hooks layer provides
+defense-in-depth: even if the agent attempts `ls ../human-eval/`, the `PreToolUse`
+hook intercepts and denies the tool call.
+
+For scenarios where the agent runs outside Claude Code (no hooks support) or where
+CI-level isolation is required, use hardened mode.
 
 ---
 
@@ -390,7 +394,7 @@ For real (non-synthetic) data:
 
 ## Attack Vector Analysis
 
-### Standard Mode: 13/13 blocked within workspace
+### Standard Mode: 14/14 blocked (workspace + filesystem traversal)
 
 | # | Attack | Why it fails |
 |---|--------|-------------|
@@ -407,8 +411,9 @@ For real (non-synthetic) data:
 | 11 | Direct parquet cache read | Cache only contains train+val data |
 | 12 | `inspect` module | Nothing test-related to discover |
 | 13 | Dynamic `__import__` + `getattr` | No test-related attributes anywhere |
+| 14 | `ls ../human-eval/` or `cat ../human-eval/*` | Claude Code `PreToolUse` hook denies any tool call referencing `human-eval/` |
 
-**Remaining risk**: agent traverses filesystem to `../human-eval/`
+**Remaining risks**: agent modifies `.claude/hooks/` to disable protection (same threat model as modifying prepare.py — program.md forbids it); agent runs outside Claude Code (no hooks support).
 
 ### Hardened Mode: additionally blocks filesystem + CI attacks
 
@@ -425,12 +430,13 @@ For real (non-synthetic) data:
 
 ## When to Use Which Mode
 
-| Scenario | Recommended Mode |
-|----------|-----------------|
-| ML training (academic) | Standard |
-| Prompt optimization | Standard |
-| Algorithm tuning (internal) | Standard |
-| Trading strategy (real money) | **Hardened** |
-| Competition / benchmark | **Hardened** |
-| Multi-user evaluation | **Hardened** |
-| Quick prototyping / learning | Standard |
+| Scenario | Recommended Mode | Notes |
+|----------|-----------------|-------|
+| ML training (academic) | Standard | Hooks cover filesystem traversal |
+| Prompt optimization | Standard | |
+| Algorithm tuning (internal) | Standard | |
+| Trading strategy (real money) | **Hardened** | CI-level isolation, no local test data |
+| Competition / benchmark | **Hardened** | |
+| Multi-user evaluation | **Hardened** | |
+| Quick prototyping / learning | Standard | |
+| Agent runs outside Claude Code | **Hardened** | No hooks support → need CI isolation |
